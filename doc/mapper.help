@@ -1,0 +1,14 @@
+<p>This script maps closed basins across a DEM according to information derived via contouring.</p>
+<p><b>Input DEM</b> A raster file is a required input for creating contours and extracting depth and minima locations.</p>
+<p><b>Contour interval</b> Determines the precision for finding closed basins, at the expense of increased processing time.</p>
+<p><b>% contour change threshold</b> A key value determining if the basin lip has been reached, represented by the change in length of the contour to the next elevation level. E.g., 250% = x2.5 longer.</p>
+<p><b>% contour change threshold from initial contour</b> The % change in length the contour tracker tracks on the second contour. This can help to account for flat-bottomed overdeepenings. Keep as above to ignore this.</p>
+<p><b>Minimum depth for mapped basins</b> Closed basins shallower than this limit will not be outputted. This does not override the defined contour interval when tracking contour changes.</p>
+<p><b>Minimum area for mapped basins</b> Contours smaller than this are considered unlikely to be glacial overdeepenings and are immediately removed before tracking.</p>
+<p><b>Maximum basin perimeter</b> Contours longer than this are considered unlikely to be glacial overdeepenings and are immediately removed before tracking
+<p><b>Polygon boundary mask</b> Contours the extend beyond this mask are removed prior to processing - useful for example if the domain of interest is smaller than the DEM e.g., a continental shelf.</p>
+<p><b>Pre-made contour file</b> A pre-made contour file (polylines) can be imported to save processing time. This data file is also copied into the output GPKG.</p>
+<p><b>Allow basins containing peaks</b> Within relatively large basins a peak may extend above the lip. If used as a criteria for mapping the tracker will ignore such contours and continue until a valid lip point is found.</p>
+<p><b>Automatically load mapped basins into QGIS</b> Adds the mapped basins as a layer into the current project and styles them according to their nesting level.</p>
+<p><b>Write log file</b> Creates a detailed and timestamped log file in the same folder as the output GPKG, including how the contours were tracked within each basin.</p>
+<p><b>Output GPKG</b> Destination for output vector files.</p>
