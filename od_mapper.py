@@ -23,8 +23,8 @@
 """
 
 __author__ = 'Henry Patton'
-__date__ = '2024-08-15'
-__copyright__ = '(C) 2024 by Henry Patton'
+__date__ = '2025-11-28'
+__copyright__ = '(C) 2025 by Henry Patton'
 
 # This will get replaced with a git SHA1 when you do a git archive
 
@@ -47,6 +47,8 @@ class ODmapperPlugin(object):
 
     def __init__(self):
         self.provider = None
+        # Initialize the plugin path directory
+        self.plugin_dir = os.path.dirname(__file__)
 
     def initProcessing(self):
         """Init Processing provider for QGIS >= 3.8."""

@@ -21,15 +21,19 @@
  *                                                                         *
  ***************************************************************************/
 """
+import os
+import inspect
+from qgis.PyQt.QtGui import QIcon
 
 __author__ = 'Henry Patton'
-__date__ = '2025-03-05'
+__date__ = '2025-11-28'
 __copyright__ = '(C) 2025 by Henry Patton'
 __revision__ = '$Format:%H$'
 
 from qgis.core import QgsProcessingProvider
 from .od_mapper_algorithm import ODmapperAlgorithm
 from .od_classify_algorithm import ClassifyAlgorithm
+from .od_transect_algorithm import TransectAlgorithm
 
 class ODmapperProvider(QgsProcessingProvider):
 
@@ -50,7 +54,7 @@ class ODmapperProvider(QgsProcessingProvider):
         """
         Loads all algorithms belonging to this provider.
         """
-        algList = [ODmapperAlgorithm(), ClassifyAlgorithm()]
+        algList = [ODmapperAlgorithm(), ClassifyAlgorithm(), TransectAlgorithm()]
 
         for alg in algList: self.addAlgorithm(alg)
 
@@ -79,7 +83,10 @@ class ODmapperProvider(QgsProcessingProvider):
         Should return a QIcon which is used for your provider inside
         the Processing toolbox.
         """
-        return QgsProcessingProvider.icon(self)
+        #return QgsProcessingProvider.icon(self)
+        cmd_folder = os.path.split(inspect.getfile(inspect.currentframe()))[0]
+        icon = QIcon(os.path.join(os.path.join(cmd_folder, 'icons/icon.png')))
+        return icon
 
     def longName(self):
         """

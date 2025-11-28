@@ -1,0 +1,8 @@
+<p>Create basin transects</p>
+<p><b>Input polygons</b> A polygon layer/file of mapped closed basins.</p>
+<p><b>Unique ID field</b> Defaults to 'ID' from mapping algorithm.</p>
+<p><b>Nesting field</b> Basin nesting. Defaults to 'Nesting' from mapping algorithm.</p>
+<p><b>Input DEM</b> The digital elevation model used to map the basins. Required to calculate basin volumes.</p>
+<p><b>Output GPKG</b> Destination for the output vector file.</p>
+<p><b>Write log file</b> Creates a detailed and timestamped log file in the same folder as the output GPKG, including how the basins were classified.</p>
+

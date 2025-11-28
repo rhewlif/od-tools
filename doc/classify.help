@@ -1,4 +1,5 @@
-<p>Classifies mapped overdeepenings</p>
+<p>Classifies mapped overdeepenings. First, volumes of each closed basin is calculated. Geometric attributes are then used to classify according to elongation and roundness.</p>
+<p>Option classifications that distinguish between glacial/fluvial, and age of last occupancy can also be extracted depending on available input files.</p>
 <p><b>Input polygons</b> A polygon layer/file of mapped closed basins.</p>
 <p><b>Unique ID field</b> Defaults to 'ID' from mapping algorithm.</p>
 <p><b>Elevation field</b> Lip elevation. Defaults to 'ELEV' from mapping algorithm.</p>
@@ -6,4 +7,3 @@
 <p><b>Input DEM</b> The digital elevation model used to map the basins. Required to calculate basin volumes.</p>
 <p><b>Output GPKG</b> Destination for the output vector file.</p>
 <p><b>Write log file</b> Creates a detailed and timestamped log file in the same folder as the output GPKG, including how the basins were classified.</p>
-

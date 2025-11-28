@@ -23,8 +23,8 @@
 """
 
 __author__ = 'Henry Patton'
-__date__ = '2024-08-15'
-__copyright__ = '(C) 2024 by Henry Patton'
+__date__ = '2025-11-28'
+__copyright__ = '(C) 2025 by Henry Patton'
 __revision__ = '$Format:%H$'
 
 import os, logging
@@ -33,10 +33,12 @@ from qgis.PyQt.QtCore import QCoreApplication, QVariant
 from qgis.core import (QgsProject, QgsProcessing, QgsProcessingParameterNumber, QgsFeatureRequest, edit,
                        QgsProcessingFeatureSourceDefinition, QgsVectorLayer, QgsField, QgsCategorizedSymbolRenderer,
                        QgsProcessingParameterVectorLayer, QgsExpression, QgsExpressionContext,
-                       QgsExpressionContextUtils, QgsProcessingAlgorithm, QgsProcessingParameterRasterLayer,QgsProcessingUtils,
+                       QgsExpressionContextUtils, QgsProcessingAlgorithm, QgsProcessingParameterRasterLayer,
+                       QgsProcessingUtils,
                        QgsProcessingParameterBoolean, QgsProcessingParameterFileDestination, QgsProviderRegistry,
                        QgsSymbol, QgsRendererCategory, NULL)
 from qgis import processing
+
 
 class ODmapperAlgorithm(QgsProcessingAlgorithm):
     post_processors = {}
@@ -74,7 +76,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterRasterLayer(
                 self.INPUT,
                 self.tr('Input DEM'),
-                optional = False
+                optional=False
             )
         )
 
@@ -209,7 +211,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
 
     def tracker(self, intersected_layer, start_z):
         request = QgsFeatureRequest()
-        clause1 = QgsFeatureRequest.OrderByClause('Depth', ascending=True) # or ELEV?
+        clause1 = QgsFeatureRequest.OrderByClause('Depth', ascending=True)  # or ELEV?
         orderby = QgsFeatureRequest.OrderBy([clause1])
         request.setOrderBy(orderby).setFlags(QgsFeatureRequest.NoGeometry)
         context_exp = QgsExpressionContext()
@@ -232,18 +234,21 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             counter += 1
 
             if start_z > f['ELEV']:
-                self.update_log('...' + str(f['ID']) + ', ' + str(start_z) + '>' + str(f['ELEV']) +', Minima above contour')
+                self.update_log(
+                    '...' + str(f['ID']) + ', ' + str(start_z) + '>' + str(f['ELEV']) + ', Minima above contour')
                 error += 1
             elif f['ID'] in cont:
-                self.update_log('...' + str(counter) + '/' + str(max_count) + ', ' + str(f['ID']) + ', Recrossing contour')
+                self.update_log(
+                    '...' + str(counter) + '/' + str(max_count) + ', ' + str(f['ID']) + ', Recrossing contour')
             else:
                 diff = (f['Boundary'] / last_contour) * 100  # percentage increase from last contour
 
-                #if f['Seeds'] == 0:
+                # if f['Seeds'] == 0:
                 #    self.update_log('...' + str(f['ID']) + ', ' + str("%.1f" % diff)
                 #                    + '/' + str(self.contour_change) + ', Entering a contour without seeds')
                 #    error += 1  # entering a contour without seeds
-                if counter > 1 and (f['ELEV'] - last_elev) != self.cInterval:  # perimeters can be longer on lower elevations!
+                if counter > 1 and (
+                        f['ELEV'] - last_elev) != self.cInterval:  # perimeters can be longer on lower elevations!
                     self.update_log('...' + str(f['ID']) + ', ' + str("%.1f" % diff)
                                     + '/' + str(self.contour_change) + ', Left basin')
                     error += 1  # left basin into another OD (contour getting smaller/diff)
@@ -252,13 +257,15 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                                     + '/' + str(self.contour_change) + ', Going downhill')
                     error += 1  # going downhill
                 elif diff > self.flatbottom and counter == 2:  # on the second contour
-                    self.update_log('...' + str(counter) + '/' + str(max_count) + ', ' + str(f['ID']) + ', ' + str("%.1f" % diff)
-                                    + '/' + str(self.flatbottom) + ', Too big second jump')
+                    self.update_log(
+                        '...' + str(counter) + '/' + str(max_count) + ', ' + str(f['ID']) + ', ' + str("%.1f" % diff)
+                        + '/' + str(self.flatbottom) + ', Too big second jump')
                     error += 1  # initial contour change too large
 
                 elif diff > self.contour_change and counter > 2:  # above the second contour
-                    self.update_log('...' + str(counter) + '/' + str(max_count) + str(f['ID']) + ', ' + str("%.1f" % diff)
-                                    + '/' + str(self.contour_change) + ', Too big a jump')
+                    self.update_log(
+                        '...' + str(counter) + '/' + str(max_count) + str(f['ID']) + ', ' + str("%.1f" % diff)
+                        + '/' + str(self.contour_change) + ', Too big a jump')
                     error += 1  # contour change too large
 
                 elif f['Seeds'] > seeds and seeds <= 2:
@@ -269,8 +276,9 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                         self.update_log('...' + 'Checking lip ' + str(check_f['ID']))
                     else:
                         self.update_log(
-                        '...' + str(counter) + '/' + str(max_count) + ', ' + str(f['ID']) + ', ' + str("%.1f" % diff)
-                        + '/' + str(self.contour_change) + ', Seeds increased')
+                            '...' + str(counter) + '/' + str(max_count) + ', ' + str(f['ID']) + ', ' + str(
+                                "%.1f" % diff)
+                            + '/' + str(self.contour_change) + ', Seeds increased')
                     self.update_log('...' + 'Checking lip ' + str(check_f['ID']))
                     if last_f_2:
                         self.check_lip(check_f, last_f_2)
@@ -281,16 +289,19 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                     last_f_2 = last_f
                     last_f = f
 
-                elif self.allow_peaks == 0 and f['diff_maxElev'] > self.cInterval:  # don't track as potential lip, but continue up
+                elif self.allow_peaks == 0 and f[
+                    'diff_maxElev'] > self.cInterval:  # don't track as potential lip, but continue up
                     self.update_log(
                         '...' + str(counter) + '/' + str(max_count) + ', '
                         + str(f['ID']) + ', Basin contains a peak ' + str(f['diff_maxElev']) + 'm above the lip')
                 elif self.allow_peaks == 1 and last_f:
-                    if f['diff_maxElev'] > 0 and (f['diff_maxElev'] - last_f['diff_maxElev']) > 100:  # don't track as potential lip, but continue up
+                    if f['diff_maxElev'] > 0 and (f['diff_maxElev'] - last_f[
+                        'diff_maxElev']) > 100:  # don't track as potential lip, but continue up
                         self.update_log(
                             '...' + str(counter) + '/' + str(max_count) + ', '
-                            + str(f['ID']) + ', Basin contains a sudden peak ' + str(f['diff_maxElev']) + 'm above the lip')
-                        #error += 1  # contour change too large
+                            + str(f['ID']) + ', Basin contains a sudden peak ' + str(
+                                f['diff_maxElev']) + 'm above the lip')
+                        # error += 1  # contour change too large
                         self.update_log('...' + 'Checking lip ' + str(check_f['ID']))
                         if last_f_2:
                             self.check_lip(check_f, last_f_2)
@@ -307,13 +318,12 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                         last_f = f
                 else:
                     self.update_log(
-                       '...' + str(counter) + '/' + str(max_count)
-                       + ', ' + str(f['ID']) + ', ' + ("%.1f" % diff) + '/'
-                       + str(self.contour_change) + ', OK')
+                        '...' + str(counter) + '/' + str(max_count)
+                        + ', ' + str(f['ID']) + ', ' + ("%.1f" % diff) + '/'
+                        + str(self.contour_change) + ', OK')
                     check_f = f
                     last_f_2 = last_f
                     last_f = f
-
 
             if error > 0 or counter == max_count:
                 if check_f:
@@ -321,7 +331,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                     if last_f_2:
                         self.check_lip(check_f, last_f_2)
                     else:
-                        self.check_lip(check_f, last_f) # if on the second contour
+                        self.check_lip(check_f, last_f)  # if on the second contour
                     return self.tracked_lips
 
             cont.append(f['ID'])
@@ -333,10 +343,12 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         field_idx = od_polygons_layer.fields().indexOf('Nesting')
         for i in range(1, 1000):
             if i == 1:
-                od_polygons_layer.selectByExpression('(overlay_contains(@layer) is True and overlay_within(@layer) is False) or overlay_disjoint(@layer)')
+                od_polygons_layer.selectByExpression(
+                    '(overlay_contains(@layer) is True and overlay_within(@layer) is False) or overlay_disjoint(@layer)')
 
             elif i > 1:
-                od_polygons_layer.selectByExpression('overlay_within(@layer) and Nesting is NULL and overlay_within(@layer, filter:= Nesting is NULL) IS False')
+                od_polygons_layer.selectByExpression(
+                    'overlay_within(@layer) and Nesting is NULL and overlay_within(@layer, filter:= Nesting is NULL) IS False')
 
             od_polygon_count = od_polygons_layer.selectedFeatureCount()
             if od_polygon_count == 0:
@@ -367,14 +379,16 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         params = {'INPUT': layer,
                   'LAYER_NAME': layer_name,
                   'OUTPUT': self.ODfilename}
-        processing.run("native:savefeatures", params, is_child_algorithm=True, context=self.context, feedback=self.feedback)
+        processing.run("native:savefeatures", params, is_child_algorithm=True, context=self.context,
+                       feedback=self.feedback)
         self.update_log('Exported ' + str(layer_name) + ' layer to ' + self.ODfilename)
-    
+
     def export_layer(self, layer, layer_name):
         params = {'INPUT': layer,
                   'OPTIONS': '-overwrite -nln ' + layer_name,
                   'OUTPUT': self.ODfilename}
-        processing.run("gdal:convertformat", params, is_child_algorithm=True, context=self.context, feedback=self.feedback)
+        processing.run("gdal:convertformat", params, is_child_algorithm=True, context=self.context,
+                       feedback=self.feedback)
         self.update_log('Exported ' + str(layer_name) + ' layer to ' + self.ODfilename)
 
     def processAlgorithm(self, parameters, context, feedback):
@@ -421,16 +435,20 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             self.logger.addHandler(console_handler)
             self.logger.addHandler(file_handler)
             self.logger.setLevel("INFO")
-            self.update_log('Script started at ' + self.t0.strftime('%Y-%m-%d %H:%M:%S')+'\n')
-            self.update_log('\nInput DEM: ' + uri_components['path']+'\n'
-                            'Grid resolution (X,Y): ' + str(grid_res_x) + ', ' + str(grid_res_y) + ' m\n'
-                            'Contour Interval: ' + str(parameters[self.contour_interval]) + ' m\n'
-                            'Contour Threshold: ' + str(parameters[self.contour_threshold]) + '\n'
-                            'Minimum OD area: ' + str(parameters[self.min_OD_area]) + ' km2\n'
-                            'Mask: ' + str(mask.name()) + '\n'
-                            'Predefined contours: ' + str(contours_name) + '\n'
-                            'Output GPKG: ' + self.ODfilename + '\n'
-                            'Projection: ' + dem.crs().authid() + '\n')
+            self.update_log('Script started at ' + self.t0.strftime('%Y-%m-%d %H:%M:%S') + '\n')
+            self.update_log('\nInput DEM: ' + uri_components['path'] + '\n'
+                                                                       'Grid resolution (X,Y): ' + str(
+                grid_res_x) + ', ' + str(grid_res_y) + ' m\n'
+                                                       'Contour Interval: ' + str(
+                parameters[self.contour_interval]) + ' m\n'
+                                                     'Contour Threshold: ' + str(
+                parameters[self.contour_threshold]) + '\n'
+                                                      'Minimum OD area: ' + str(parameters[self.min_OD_area]) + ' km2\n'
+                                                                                                                'Mask: ' + str(
+                mask.name()) + '\n'
+                               'Predefined contours: ' + str(contours_name) + '\n'
+                                                                              'Output GPKG: ' + self.ODfilename + '\n'
+                                                                                                                  'Projection: ' + dem.crs().authid() + '\n')
 
         # create the countours
         self.update_log('..\n\n1. Preparing files for mapping ODs')
@@ -454,7 +472,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
 
         all_contours_layer = QgsVectorLayer(self.ODfilename + '|layername=contours_original', 'Lines', 'ogr')
         all_contours_layer.selectAll()
-        contour_layer = processing.run("native:saveselectedfeatures", 
+        contour_layer = processing.run("native:saveselectedfeatures",
                                        {'INPUT': all_contours_layer, 'OUTPUT': 'memory:'},
                                        context=context, feedback=feedback)['OUTPUT']
         all_contours_layer.removeSelection()
@@ -490,8 +508,8 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         self.update_log('Removed open contours. n = ' + str(contour_layer.featureCount()))
 
         if contour_layer.dataProvider().fieldNameIndex("Boundary") == -1:
-            contour_layer.dataProvider().addAttributes([QgsField("Boundary", QVariant.Int)])
-            contour_layer.dataProvider().addAttributes([QgsField("Extent", QVariant.Double, "double", 10, 3)])
+            contour_layer.dataProvider().addAttributes([QgsField("Boundary", QVariant.Int),
+                                                        QgsField("Extent", QVariant.Double, "double", 10, 3)])
             contour_layer.updateFields()
 
         context_exp = QgsExpressionContext()
@@ -502,7 +520,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             for f in contour_layer.getFeatures():
                 context_exp.setFeature(f)
                 length = f.geometry().length()
-                if length < (grid_res_x * 8) or length > self.maxODperim:# or length < self.minODperim:
+                if length < (grid_res_x * 8) or length > self.maxODperim:  # or length < self.minODperim:
                     contour_layer.deleteFeature(f.id())
                 else:
                     contour_layer.changeAttributeValue(f.id(), field_idx, length)
@@ -511,8 +529,9 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         if feedback.isCanceled():
             return {}
 
-        self.update_log('Removed small (' + str(grid_res_x * 8) + 'm) and big (' + str(self.maxODperim) + ' m) contours. n = ' +
-                        str(contour_layer.featureCount()))
+        self.update_log(
+            'Removed small (' + str(grid_res_x * 8) + 'm) and big (' + str(self.maxODperim) + ' m) contours. n = ' +
+            str(contour_layer.featureCount()))
 
         # Check for cancelation
         if feedback.isCanceled():
@@ -540,13 +559,14 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         # remove contours with peaks inside or where too small to be considered OD
         self.update_log('Calculating contour depth stats')
         zonal = processing.run("native:zonalstatisticsfb", {'INPUT': line2polygon_layer, 'INPUT_RASTER': dem,
-                                                            'RASTER_BAND': 1, 'COLUMN_PREFIX': '_', 'STATISTICS': [2, 3, 5, 6],
+                                                            'RASTER_BAND': 1, 'COLUMN_PREFIX': '_',
+                                                            'STATISTICS': [2, 3, 5, 6],
                                                             'OUTPUT': 'TEMPORARY_OUTPUT'},
                                context=context, feedback=feedback)
         allcontour_polygons_layer = zonal['OUTPUT']
 
-        allcontour_polygons_layer.dataProvider().addAttributes([QgsField("diff_maxElev", QVariant.Int)])
-        allcontour_polygons_layer.dataProvider().addAttributes([QgsField("Depth", QVariant.Int)])
+        allcontour_polygons_layer.dataProvider().addAttributes([QgsField("diff_maxElev", QVariant.Int),
+                                                                QgsField("Depth", QVariant.Int)])
         allcontour_polygons_layer.updateFields()
         max_diff_idx = allcontour_polygons_layer.fields().indexOf('diff_maxElev')
         depth_idx = allcontour_polygons_layer.fields().indexOf('Depth')
@@ -554,15 +574,17 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         expression_depth = QgsExpression('"ELEV" - "_min"')
         request = QgsFeatureRequest()
         request.setFlags(QgsFeatureRequest.NoGeometry)
-        request.setSubsetOfAttributes(['_max', '_min', 'ELEV', 'Depth', 'diff_maxElev'], allcontour_polygons_layer.fields())
+        request.setSubsetOfAttributes(['_max', '_min', 'ELEV', 'Depth', 'diff_maxElev'],
+                                      allcontour_polygons_layer.fields())
         context_exp = QgsExpressionContext()
         context_exp.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(allcontour_polygons_layer))
-        
+
         with edit(allcontour_polygons_layer):
             for f in allcontour_polygons_layer.getFeatures(request):
                 context_exp.setFeature(f)
                 allcontour_polygons_layer.changeAttributeValue(f.id(), max_diff_idx, expression.evaluate(context_exp))
-                allcontour_polygons_layer.changeAttributeValue(f.id(), depth_idx, expression_depth.evaluate(context_exp))
+                allcontour_polygons_layer.changeAttributeValue(f.id(), depth_idx,
+                                                               expression_depth.evaluate(context_exp))
 
         # spatial summary works more efficiently with contour count reduced as much as possible
         QgsProject.instance().addMapLayer(allcontour_polygons_layer, False)
@@ -589,7 +611,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         # delete lone polygons with a max elevation greater than the lip. The rest are dealt with in the tracker as some 'peaks' might be contained by higher lips.
         if self.allow_peaks == 0:
             allcontour_polygons_layer.selectByExpression(
-                '"diff_maxElev" > '+str(self.cInterval) + ' and overlay_disjoint(@layer)')
+                '"diff_maxElev" > ' + str(self.cInterval) + ' and overlay_disjoint(@layer)')
 
             if allcontour_polygons_layer.selectedFeatureCount() > 0:
                 with edit(allcontour_polygons_layer):
@@ -597,7 +619,8 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             self.update_log('Removed contours containing peaks. n = ' + str(allcontour_polygons_layer.featureCount()))
 
         # create seeds
-        processing.run("native:createspatialindex", {'INPUT': allcontour_polygons_layer}, is_child_algorithm=True, context=context)
+        processing.run("native:createspatialindex", {'INPUT': allcontour_polygons_layer}, is_child_algorithm=True,
+                       context=context)
         allcontour_polygons_layer.selectByExpression('overlay_contains(@layer)')
         allcontour_polygons_layer.invertSelection()
 
@@ -612,23 +635,25 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         # remove those that don't match minima
 
         self.update_log('..\n\n2. Seeding basins')
-        self.update_log('Creating OD minima points from '+str(contour_polygons_layer.featureCount())+' seed polygons')
+        self.update_log(
+            'Creating OD minima points from ' + str(contour_polygons_layer.featureCount()) + ' seed polygons')
 
         dem2point = processing.run("native:generatepointspixelcentroidsinsidepolygons",
                                    {'INPUT_RASTER': dem, 'INPUT_VECTOR': contour_polygons_layer,
                                     'OUTPUT': 'TEMPORARY_OUTPUT'}, feedback=feedback)
         minima_points_layer = dem2point['OUTPUT']
 
-        processing.run("native:createspatialindex", {'INPUT': minima_points_layer}, is_child_algorithm=True,context=context)
+        processing.run("native:createspatialindex", {'INPUT': minima_points_layer}, is_child_algorithm=True,
+                       context=context)
         self.update_log('Created minima points. n = ' + str(minima_points_layer.featureCount()))
 
         if minima_points_layer.dataProvider().fieldNameIndex("elevation") == -1:
             minima_points_layer.dataProvider().addAttributes([QgsField("elevation", QVariant.Int)])
             minima_points_layer.updateFields()
-        expression = QgsExpression('raster_value(\'' + dem.name() + '\',1,@geometry)')
 
         self.update_log('Extracting elevation data to OD minima points')
 
+        expression = QgsExpression('raster_value(\'' + dem.name() + '\',1,@geometry)')
         context_exp = QgsExpressionContext()
         context_exp.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(minima_points_layer))
 
@@ -657,7 +682,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                         min_d = f['elevation']
                         min_id = f['poly_id']
                     elif f['elevation'] >= min_d:
-                            minima_points_layer.deleteFeature(f.id())
+                        minima_points_layer.deleteFeature(f.id())
 
         # Remove minima that are above their seed polygon
         join = processing.run("native:joinattributesbylocation", {'INPUT': minima_points_layer, 'PREDICATE': [0],
@@ -735,7 +760,8 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         # 2. Setup contour tracking
         self.update_log('..\n\n3. Tracking')
         processing.run("native:createspatialindex", {'INPUT': seeded_layer}, is_child_algorithm=True, context=context)
-        processing.run("native:createspatialindex", {'INPUT': minima_points_layer}, is_child_algorithm=True, context=context)
+        processing.run("native:createspatialindex", {'INPUT': minima_points_layer}, is_child_algorithm=True,
+                       context=context)
 
         QgsProject.instance().addMapLayer(contour_layer, False)
         QgsProject.instance().addMapLayer(minima_points_layer, False)
@@ -744,7 +770,8 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         if self.allow_peaks == 1:
             seeded_layer.selectByExpression('"Depth" >= ' + str(self.minODdepth) + ' and overlay_disjoint(@layer)')
         else:
-            seeded_layer.selectByExpression('"Depth" >= ' + str(self.minODdepth) + ' and "diff_maxElev" <= '+str(self.cInterval) + ' and overlay_disjoint(@layer)')
+            seeded_layer.selectByExpression('"Depth" >= ' + str(self.minODdepth) + ' and "diff_maxElev" <= ' + str(
+                self.cInterval) + ' and overlay_disjoint(@layer)')
 
         # create a first list of basins with a single contour
         lips = []
@@ -753,7 +780,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             lips.append(feat['ID'])
 
         if len(lips) == 1:
-            seeded_layer.selectByExpression('"ID" = '+str(lips[0]))
+            seeded_layer.selectByExpression('"ID" = ' + str(lips[0]))
         elif len(lips) > 1:
             seeded_layer.selectByExpression("ID in {}".format(tuple(lips)))
         if seeded_layer.selectedFeatureCount() > 1:
@@ -781,12 +808,13 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                 start_z = feature['elevation']
 
             intersect = processing.run("native:extractbylocation", {'INPUT': seeded_layer,
-                                                       'PREDICATE': [1],
-                                                       'INTERSECT': QgsProcessingFeatureSourceDefinition(
-                                                           minima_points_layer.id(), selectedFeaturesOnly=True,
-                                                           featureLimit=-1,
-                                                           geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
-                                                        'OUTPUT': 'TEMPORARY_OUTPUT'})
+                                                                    'PREDICATE': [1],
+                                                                    'INTERSECT': QgsProcessingFeatureSourceDefinition(
+                                                                        minima_points_layer.id(),
+                                                                        selectedFeaturesOnly=True,
+                                                                        featureLimit=-1,
+                                                                        geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
+                                                                    'OUTPUT': 'TEMPORARY_OUTPUT'})
             intersected_layer = intersect['OUTPUT']
 
             self.update_log('...Selected seeds: n=' + str(intersected_layer.featureCount()))
@@ -830,7 +858,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         if n_lips > 1:
             contour_layer.selectByExpression("ID in {}".format(tuple(unique_lips)))
         elif n_lips == 1:
-            contour_layer.selectByExpression('"ID" = '+str(unique_lips[0]))
+            contour_layer.selectByExpression('"ID" = ' + str(unique_lips[0]))
         polygonise = processing.run("qgis:linestopolygons", {
             'INPUT': QgsProcessingFeatureSourceDefinition(contour_layer.id(), selectedFeaturesOnly=True,
                                                           featureLimit=-1,
@@ -849,7 +877,8 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
 
         processing.run("native:createspatialindex", {'INPUT': minima_points_layer}, is_child_algorithm=True,
                        context=context)
-        processing.run("native:createspatialindex", {'INPUT': od_polygons_layer}, is_child_algorithm=True, context=context)
+        processing.run("native:createspatialindex", {'INPUT': od_polygons_layer}, is_child_algorithm=True,
+                       context=context)
         join_min = processing.run("native:joinattributesbylocation", {'INPUT': minima_points_layer,
                                                                       'PREDICATE': [5], 'JOIN': od_polygons_layer,
                                                                       'JOIN_FIELDS': ['ID'], 'METHOD': 0,
@@ -886,10 +915,10 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
 
         # Add nesting information to the minima
         points_join = processing.run("native:joinattributestable",
-                       {'INPUT': join_min_layer, 'FIELD': 'ID_2',
-                        'INPUT_2': od_polygons_layer, 'FIELD_2': 'ID',
-        'FIELDS_TO_COPY': ['Depth', 'Nesting'], 'METHOD': 1, 'DISCARD_NONMATCHING': False,
-        'PREFIX': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})
+                                     {'INPUT': join_min_layer, 'FIELD': 'ID_2',
+                                      'INPUT_2': od_polygons_layer, 'FIELD_2': 'ID',
+                                      'FIELDS_TO_COPY': ['Depth', 'Nesting'], 'METHOD': 1, 'DISCARD_NONMATCHING': False,
+                                      'PREFIX': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})
         nested_points = points_join['OUTPUT']
 
         QgsProject.instance().addMapLayer(nested_points, False)
@@ -899,16 +928,17 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         max_nest = od_polygons_layer.maximumValue(idx)
 
         # Trim mapped polygons to remove nested OD with only one child within
-        for n in range(max_nest,1,-1):
+        for n in range(max_nest, 1, -1):
             self.update_log('Nesting ' + str(n))
-            nested_points.selectByExpression('"Nesting" = '+str(n))
-            od_polygons_layer.selectByExpression('"Nesting" = '+str(n-1))
+            nested_points.selectByExpression('"Nesting" = ' + str(n))
+            od_polygons_layer.selectByExpression('"Nesting" = ' + str(n - 1))
             count = processing.run("native:countpointsinpolygon", {'POLYGONS': QgsProcessingFeatureSourceDefinition(
                 od_polygons_layer.id(), selectedFeaturesOnly=True, featureLimit=-1,
                 geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid), 'POINTS': QgsProcessingFeatureSourceDefinition(
-                nested_points.id(), selectedFeaturesOnly=True, featureLimit=-1, geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
-                                                           'WEIGHT': '', 'CLASSFIELD': '', 'FIELD': 'NUMPOINTS',
-                                                           'OUTPUT': 'TEMPORARY_OUTPUT'})
+                nested_points.id(), selectedFeaturesOnly=True, featureLimit=-1,
+                geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
+                'WEIGHT': '', 'CLASSFIELD': '', 'FIELD': 'NUMPOINTS',
+                'OUTPUT': 'TEMPORARY_OUTPUT'})
             counted = count['OUTPUT']
             counted.selectByExpression('"NUMPOINTS" = 1')
             if counted.selectedFeatureCount() > 0:
@@ -921,9 +951,10 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                 # delete the polygons within those selected and at the appropiate nesting
                 if len(centroids) == 1:
                     od_polygons_layer.selectByExpression(
-                        'overlay_within(@layer, filter:="ID = '+ str(centroids[0])+') and Nesting = '+str(n))
+                        'overlay_within(@layer, filter:="ID = ' + str(centroids[0]) + ') and Nesting = ' + str(n))
                 elif len(centroids) > 1:
-                    od_polygons_layer.selectByExpression('overlay_within(@layer, filter:='+"ID in {}".format(tuple(centroids))+') and Nesting = '+str(n))
+                    od_polygons_layer.selectByExpression('overlay_within(@layer, filter:=' + "ID in {}".format(
+                        tuple(centroids)) + ') and Nesting = ' + str(n))
                 if nested_points.selectedFeatureCount() > 1:
                     with edit(od_polygons_layer):
                         od_polygons_layer.deleteSelectedFeatures()
@@ -938,7 +969,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         if join_min_layer.selectedFeatureCount() > 1:
             with edit(join_min_layer):
                 join_min_layer.deleteSelectedFeatures()
-        
+
         num_of_features = join_min_layer.featureCount()
         self.update_log('Minima points within mapped OD. n = ' + str(num_of_features))
 

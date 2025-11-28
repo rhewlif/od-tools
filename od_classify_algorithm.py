@@ -23,8 +23,8 @@
 """
 
 __author__ = 'Henry Patton'
-__date__ = '2024-08-15'
-__copyright__ = '(C) 2024 by Henry Patton'
+__date__ = '2025-11-28'
+__copyright__ = '(C) 2025 by Henry Patton'
 
 # This will get replaced with a git SHA1 when you do a git archive
 
@@ -32,13 +32,14 @@ __revision__ = '$Format:%H$'
 
 import os, logging
 from datetime import datetime
+
 from qgis.PyQt.QtCore import QCoreApplication, QVariant
 from qgis.core import (QgsProject, QgsProcessing, QgsProcessingParameterField, QgsFeatureRequest, edit,
-                       QgsProcessingFeatureSourceDefinition, QgsVectorLayer, QgsField, QgsCategorizedSymbolRenderer,
+                       QgsProcessingFeatureSourceDefinition, QgsField,
                        QgsProcessingParameterFeatureSource, QgsExpression, QgsExpressionContext, QgsAggregateCalculator,
                        QgsExpressionContextUtils, QgsProcessingAlgorithm, QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterBoolean, QgsProcessingParameterVectorDestination, QgsProviderRegistry,
-                       QgsSymbol, QgsRendererCategory, QgsProcessingUtils)
+                       QgsProcessingUtils,QgsProcessingParameterVectorLayer, NULL)
 from qgis import processing
 
 class ClassifyAlgorithm(QgsProcessingAlgorithm):
@@ -48,8 +49,10 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
     elev_field = 'elev_field'
     nesting_field = 'nesting_field'
+    valleys = 'valleys'
+    isochrones = 'isochrones'
+    thermal = 'thermal'
     id_field = 'id_field'
-    loadOD = 'loadOD'
     writeLog = 'writeLog'
 
     def __init__(self):
@@ -60,6 +63,10 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         self.t0 = None
         self.logger = None
         self.write_log = None
+        self.dem_file = None
+        self.valley_points = None
+        self.isochrone_polys = None
+        self.thermal_state = None
 
     def initAlgorithm(self, config):
         self.addParameter(
@@ -102,10 +109,38 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         )
 
         self.addParameter(
+            QgsProcessingParameterVectorLayer(
+                self.valleys,
+                self.tr('Valley classification point file'),
+                [QgsProcessing.TypeVectorPoint],
+                optional=True,
+                defaultValue=r'C:\Users\hpa017\OneDrive - UiT Office 365\Data\Greenland\Paxman2022_TIA\GreenlandValleys.gpkg|layername=greenlandvalleys'
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterVectorLayer(
+                self.isochrones,
+                self.tr('Isochrone polygon file'),
+                [QgsProcessing.TypeVectorPolygon],
+                optional=True,
+                defaultValue=r'C:\Users\hpa017\OneDrive - UiT Office 365\Data\Greenland\PaleoGrIS version 1.0\Isochrone_polygon_shapefiles\PaleoGrIS_isochrones_merged_fixed.gpkg|layername=fixed_geometries'
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterVectorLayer(
+                self.thermal,
+                self.tr('Thermal state polygons'),
+                [QgsProcessing.TypeVectorPolygon],
+                optional=True,
+                defaultValue=r'C:\Users\hpa017\OneDrive - UiT Office 365\Data\Greenland\Basal thermal state\likely_thermal_state_dissolved.gpkg|layername=likely_thermal_state_dissolved'
+            )
+        )
+
+        self.addParameter(
             QgsProcessingParameterRasterLayer(
                 self.DEM,
                 self.tr('Input DEM'),
-                optional=False
+                optional=True
             )
         )
 
@@ -120,19 +155,41 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterBoolean(
                 self.writeLog,
                 'Write log file',
-                True,
+                False,
                 optional=True)
         )
 
     def update_log(self, message):
         t1 = datetime.now()
         if not message.startswith('..'):  # don't publish tracker updates to GUI
-            self.feedback.pushInfo('{}'.format(str(t1 - self.t0)[:-4]) + ' ' + message + '\n')
+            self.feedback.pushInfo('{}'.format(str(t1 - self.t0)[:-4]) + ': ' + message + '\n')
         if self.write_log:
             if message.startswith('..'):
                 self.logger.info(message)
             else:
-                self.logger.info('{}'.format(str(t1 - self.t0)[:-4]) + ' ' + message)
+                self.logger.info('{}'.format(str(t1 - self.t0)[:-4]) + ': ' + message)
+
+    def renesting(self, od_polygons_layer):
+        field_idx = od_polygons_layer.fields().indexOf('Class_Nesting')
+        for i in range(1, 1000):
+            if i == 1:
+                od_polygons_layer.selectByExpression('(overlay_contains(@layer) is True and overlay_within(@layer) is False) or overlay_disjoint(@layer)')
+
+            elif i > 1:
+                od_polygons_layer.selectByExpression('overlay_within(@layer) and Class_Nesting is NULL and overlay_within(@layer, filter:= Class_Nesting is NULL) IS False')
+
+            od_polygon_count = od_polygons_layer.selectedFeatureCount()
+            if od_polygon_count == 0:
+                break
+            else:
+                self.update_log('Nesting level ' + str(i) + ': n = ' + str(od_polygon_count))
+                context_exp = QgsExpressionContext()
+                context_exp.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(od_polygons_layer))
+
+                with edit(od_polygons_layer):
+                    for f in od_polygons_layer.getSelectedFeatures():
+                        context_exp.setFeature(f)
+                        od_polygons_layer.changeAttributeValue(f.id(), field_idx, i)
 
     def processAlgorithm(self, parameters, context, feedback):
         self.context = context
@@ -142,15 +199,37 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         self.id_field = self.parameterAsString(parameters, self.id_field, context)
         self.elev_field = self.parameterAsString(parameters, self.elev_field, context)
         self.nesting_field = self.parameterAsString(parameters, self.nesting_field, context)
-        self.dem = self.parameterAsRasterLayer(parameters, self.DEM, context)
-        uri_components = QgsProviderRegistry.instance().decodeUri(self.dem.dataProvider().name(), self.dem.publicSource())
+        if self.DEM in parameters and parameters[self.DEM] is not None:
+            self.dem_file = self.parameterAsRasterLayer(parameters, self.DEM, context)
+            dem_path = self.dem_file.publicSource()
+        else:
+            dem_path = 'No DEM provided - volume calcs skipped'
         uri_components_od = QgsProviderRegistry.instance().decodeUri(self.od.dataProvider().name(), self.od.publicSource())
         self.out_path = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
         self.write_log = self.parameterAsInt(parameters, self.writeLog, context)
+        if self.valleys in parameters and parameters[self.valleys] is not None:
+            self.valley_points = self.parameterAsVectorLayer(parameters, self.valleys, context)
+            valley_path = self.valley_points.publicSource()
+        else:
+            valley_path = 'No valleys provided - valley classification skipped'
+        if self.isochrones in parameters and parameters[self.isochrones] is not None:
+            self.isochrone_polys = self.parameterAsVectorLayer(parameters, self.isochrones, context)
+            isochrones_path = self.isochrone_polys.publicSource()
+        else:
+            isochrones_path = 'No isochrones provided - age classification skipped'
+        if self.thermal in parameters and parameters[self.thermal] is not None:
+            self.thermal_state = self.parameterAsVectorLayer(parameters, self.thermal, context)
+            thermal_path = self.thermal_state.publicSource()
+        else:
+            thermal_path = 'No thermal state provided - thermal classification skipped'
         self.logger = logging.getLogger(__name__)
         self.update_log('Script started at ' + self.t0.strftime('%Y-%m-%d %H:%M:%S') + '\n')
-        self.update_log('\nInput polygons: ' + uri_components_od['path'] + '\nInput DEM: ' + uri_components[
-            'path'] + '\nOutput GPKG: ' + self.out_path + '\nProjection: ' + self.dem.crs().authid())
+        self.update_log('\n\nInput polygons: ' + uri_components_od['path'] +
+                        '\n\nInput DEM: ' + dem_path +
+                        '\n\nInput Valleys: ' + valley_path +
+                        '\n\nInput Isochrones: ' + isochrones_path +
+                        '\n\nThermal State: ' + thermal_path +
+                        '\n\nOutput GPKG: ' + self.out_path)
 
         if os.path.exists(self.out_path):
             os.remove(self.out_path)
@@ -166,66 +245,67 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             self.logger.setLevel("INFO")
             self.update_log('Logging to: ' + log_filename + '\n')
 
-        box = processing.run("qgis:minimumboundinggeometry", {
-            'INPUT': self.od,
-            'FIELD': self.id_field, 'TYPE': 1, 'OUTPUT': 'TEMPORARY_OUTPUT'})
-        boxed = box['OUTPUT']
-
         ### calculate volumes ###
-        idx = self.od.fields().indexFromName(self.id_field)
-        elevx = self.od.fields().indexFromName(self.elev_field)
-        QgsProject.instance().addMapLayer(self.od, False)
+        if self.dem_file:
+            self.update_log('Calculating volumes...')
+            idx = self.od.fields().indexFromName(self.id_field)
+            elevx = self.od.fields().indexFromName(self.elev_field)
+            QgsProject.instance().addMapLayer(self.od, False)
 
-        unique_elevs = []
-        unique_values = []
-        volumes = []
-        for f in self.od.getFeatures():
-            unique_values.append(f[idx])
-            unique_elevs.append(f[elevx])
+            unique_elevs = []
+            unique_values = []
+            volumes = []
+            for f in self.od.getFeatures():
+                unique_values.append(f[idx])
+                unique_elevs.append(f[elevx])
 
+            feedback.setProgress(0)
+            milestones = list(range(5, 101, 5))
+            self.update_log('\n{}% complete @ '.format('0') + datetime.now().strftime("%H:%M.%S"))
 
-        feedback.setProgress(0)
-        milestones = list(range(5, 101, 5))
-        self.update_log('Calculating volumes...')
-        self.update_log('\n{}% complete @ '.format('0') + datetime.now().strftime("%H:%M.%S"))
+            for i, (value, elev) in enumerate(zip(unique_values, unique_elevs)):
+                self.od.selectByExpression('"'+self.id_field+'" = ' + str(value))
+                clip = processing.run("gdal:cliprasterbymasklayer",
+                           {'INPUT': self.dem_file, 'MASK': QgsProcessingFeatureSourceDefinition(
+                                self.od.id(), selectedFeaturesOnly=True, featureLimit=-1,
+                                geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid), 'SOURCE_CRS': None,
+                            'TARGET_CRS': None, 'TARGET_EXTENT': None, 'NODATA': None, 'ALPHA_BAND': False,
+                            'CROP_TO_CUTLINE': True, 'KEEP_RESOLUTION': False, 'SET_RESOLUTION': False,
+                            'X_RESOLUTION': None, 'Y_RESOLUTION': None, 'MULTITHREADING': False, 'OPTIONS': '',
+                            'DATA_TYPE': 0, 'EXTRA': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})
+                clipped = clip['OUTPUT']
+                volume = processing.run("native:rastersurfacevolume", {
+                    'INPUT': clipped, 'BAND': 1, 'LEVEL': elev, 'METHOD': 1, 'OUTPUT_HTML_FILE': 'TEMPORARY_OUTPUT'})
+                volumes.append(volume.get("VOLUME")*-1E-9) # to km3
+                self.update_log('..ID: ' + str(value) + ', Elev: ' + str(elev) +', Vol: ' + str(round(volume.get("VOLUME")*-1E-9,4)))
 
-        for i, (value, elev) in enumerate(zip(unique_values, unique_elevs)):
-            self.od.selectByExpression('"'+self.id_field+'" = ' + str(value))
-            clip = processing.run("gdal:cliprasterbymasklayer",
-                       {'INPUT': self.dem, 'MASK': QgsProcessingFeatureSourceDefinition(
-                            self.od.id(), selectedFeaturesOnly=True, featureLimit=-1,
-                            geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid), 'SOURCE_CRS': None,
-                        'TARGET_CRS': None, 'TARGET_EXTENT': None, 'NODATA': None, 'ALPHA_BAND': False,
-                        'CROP_TO_CUTLINE': True, 'KEEP_RESOLUTION': False, 'SET_RESOLUTION': False,
-                        'X_RESOLUTION': None, 'Y_RESOLUTION': None, 'MULTITHREADING': False, 'OPTIONS': '',
-                        'DATA_TYPE': 0, 'EXTRA': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})
-            clipped = clip['OUTPUT']
-            volume = processing.run("native:rastersurfacevolume", {
-                'INPUT': clipped, 'BAND': 1, 'LEVEL': elev, 'METHOD': 1, 'OUTPUT_HTML_FILE': 'TEMPORARY_OUTPUT'})
-            volumes.append(volume.get("VOLUME")*-1E-9) # to km3
-            self.update_log('..ID: ' + str(value) + ', Elev: ' + str(elev) +', Vol: ' + str(round(volume.get("VOLUME")*-1E-9,4)))
+                percentage_complete = (100.0 * (i + 1) / len(unique_values))
+                while len(milestones) > 0 and percentage_complete >= milestones[0]:
+                    self.update_log('\n{}% complete @ '.format(milestones[0]) + ' ' + datetime.now().strftime("%H:%M.%S"))
+                    # remove that milestone from the list
+                    milestones = milestones[1:]
+                feedback.setProgress(percentage_complete)
+                if feedback.isCanceled():
+                    return {}
 
-            percentage_complete = (100.0 * (i + 1) / len(unique_values))
-            while len(milestones) > 0 and percentage_complete >= milestones[0]:
-                self.update_log('\n{}% complete @ '.format(milestones[0]) + ' ' + datetime.now().strftime("%H:%M.%S"))
-                # remove that milestone from the list
-                milestones = milestones[1:]
-            feedback.setProgress(percentage_complete)
-            if feedback.isCanceled():
-                return {}
+        ### calculate shape attributes ###
+        self.update_log('Calculating shape attributes...')
+        box = processing.run("qgis:minimumboundinggeometry", {
+            'INPUT': self.od, 'FIELD': self.id_field, 'TYPE': 1, 'OUTPUT': 'TEMPORARY_OUTPUT'})
+        boxed = box['OUTPUT']
 
         join = processing.run("native:joinattributestable", {
             'INPUT': self.od, 'FIELD': self.id_field, 'INPUT_2': boxed, 'FIELD_2': self.id_field,
-            'FIELDS_TO_COPY': ['width', 'height'], 'METHOD': 1, 'DISCARD_NONMATCHING': False, 'PREFIX': '',
-            'OUTPUT': self.out_path})
-        joined2 = join['OUTPUT']
-        od = QgsVectorLayer(joined2, 'Polygons', 'ogr')
+            'FIELDS_TO_COPY': [], 'METHOD': 1, 'DISCARD_NONMATCHING': False, 'PREFIX': '',
+            'OUTPUT': 'TEMPORARY_OUTPUT'})
+        od = join['OUTPUT']
+
 
         self.update_log('Calculating roundness/elongation...')
 
-        od.dataProvider().addAttributes([QgsField("Roundness", QVariant.Double, prec=3)])
-        od.dataProvider().addAttributes([QgsField("Elong_mbg", QVariant.Double, prec=3)])
-        od.dataProvider().addAttributes([QgsField("Type", QVariant.String)])
+        od.dataProvider().addAttributes([QgsField("Roundness", QVariant.Double, prec=3),
+                                         QgsField("Elong_mbg", QVariant.Double, prec=3),
+                                         QgsField("Type", QVariant.String)])
         od.updateFields()
 
         circularity_idx = od.fields().indexOf('Roundness')
@@ -269,54 +349,211 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                     # planimetric area - suitable for small-scale features
                     od.changeAttributeValue(f.id(), area_idx, expression_area.evaluate(context))
 
-        if 'Volume' not in [fld.name() for fld in od.fields()]:
-            od.dataProvider().addAttributes([QgsField("Volume", QVariant.Double, prec=4)])
+        if self.dem_file:
+            if 'Volume' not in [fld.name() for fld in od.fields()]:
+                od.dataProvider().addAttributes([QgsField("Volume", QVariant.Double, prec=4)])
+                od.updateFields()
+
+            vol_idx = od.fields().indexOf('Volume')
+            with edit(od):
+                for f in od.getFeatures():
+                    context.setFeature(f)
+                    id_index = unique_values.index(f['ID'])
+                    od.changeAttributeValue(f.id(), vol_idx, volumes[id_index])
+
+            nest_idx = od.fields().indexFromName(self.nesting_field)
+            max_nest = od.maximumValue(nest_idx)
+
+            for n in range(1, max_nest + 1):
+                od.selectByExpression(self.nesting_field + ' = ' + str(n))
+                total_sum = od.aggregate(QgsAggregateCalculator.Sum, "Volume", fids=od.selectedFeatureIds())
+                self.update_log('Total OD volumes (nesting='+str(n)+'): ' + str(round(total_sum[0], 2)) + ' km^3')
+
+
+        #### classify valleys ####
+        if self.valley_points:
+            self.update_log('Classifying valleys')
+            QgsProject.instance().addMapLayer(self.valley_points, False)
+            valley_fields = ['Fluvial', 'Glacial']
+            for v in valley_fields:
+                od.dataProvider().addAttributes([QgsField(v, QVariant.Int)])
+                od.updateFields()
+            od.dataProvider().addAttributes([QgsField("Valley type", QVariant.String)])
             od.updateFields()
 
-        vol_idx = od.fields().indexOf('Volume')
-        with edit(od):
-            for f in od.getFeatures():
-                context.setFeature(f)
-                id_index = unique_values.index(f['ID'])
-                od.changeAttributeValue(f.id(), vol_idx, volumes[id_index])
+            selectors = [ '"Class" = \'Fluvial\' and "Classification score" < 0.5',
+                        '"Class" = \'Glacial\' and "Classification score" >= 0.5']
 
-        nest_idx = od.fields().indexFromName(self.nesting_field)
-        max_nest = od.maximumValue(nest_idx)
+            for s in selectors:
+                expression = QgsExpression('array_length(overlay_contains(layer := \''+self.valley_points.name()+
+                                           '\', filter := ' + s +', expression := "Class"))')
+                self.update_log('Counting: '+ s)
+                valley_field = valley_fields[selectors.index(s)]
 
-        for n in range(1, max_nest + 1):
-            od.selectByExpression(self.nesting_field + ' = ' + str(n))
-            total_sum = od.aggregate(QgsAggregateCalculator.Sum, "Volume", fids=od.selectedFeatureIds())
-            self.update_log('Total OD volumes (nesting='+str(n)+'): ' + str(round(total_sum[0], 2)) + ' km^3')
+                with edit(od):
+                    field_idx = od.fields().indexOf(valley_field)
+                    for f in od.getFeatures():
+                        context.setFeature(f)
+                        od.changeAttributeValue(f.id(), field_idx, expression.evaluate(context))
+
+            with edit(od):
+                field_idx = od.fields().indexOf('Valley type')
+                for f in od.getFeatures():
+                    Gl = f['Glacial']
+                    Fl = f['Fluvial']
+                    if Gl >= Fl and Gl > 0:
+                        type = 'Glacial'
+                    elif Fl > Gl:
+                        type = 'Fluvial'
+                    else:
+                        type = NULL
+                    context.setFeature(f)
+                    od.changeAttributeValue(f.id(), field_idx, type)
+
+        ### extract last occupation age ###
+        if self.isochrone_polys:
+            self.update_log('Extracting last occupation age')
+            QgsProject.instance().addMapLayer(self.valley_points, False)
+            od.dataProvider().addAttributes([QgsField('last_occupied', QVariant.Double, "double", 5, 1)])
+            od.updateFields()
+            field_idx = od.fields().indexOf('last_occupied')
+            QgsProject.instance().addMapLayer(self.isochrone_polys, False)
+
+            # sort by age, oldest first
+            request = QgsFeatureRequest()
+            clause1 = QgsFeatureRequest.OrderByClause('age', ascending=False)
+            orderby = QgsFeatureRequest.OrderBy([clause1])
+            request.setOrderBy(orderby).setFlags(QgsFeatureRequest.NoGeometry)
+            request.setSubsetOfAttributes(['age'], self.isochrone_polys.fields())
+
+            features = self.isochrone_polys.getFeatures(request)
+            total_od = od.featureCount()
+            for feat in features:
+                age = feat['age']
+                self.update_log('Age: ' + str(age))
+                self.isochrone_polys.selectByExpression('age = '+str(age))
+                self.update_log('Selected '+str(self.isochrone_polys.selectedFeatureCount())+' isochrone')
+                processing.run("native:selectbylocation", {
+                    'INPUT': od, 'PREDICATE': [0], 'INTERSECT': QgsProcessingFeatureSourceDefinition(
+                        self.isochrone_polys.id(), selectedFeaturesOnly=True, featureLimit=-1, geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
+                    'METHOD': 0})
+
+                self.update_log('# basins active at '+str(age) + ' ka: '+str(od.selectedFeatureCount()) + ' of ' + str(total_od))
+                with edit(od):
+                    for f in od.getSelectedFeatures():
+                        context.setFeature(f)
+                        od.changeAttributeValue(f.id(), field_idx, age)
+
+        ### classify thermal state
+        if self.thermal_state:
+            self.update_log('Classifying by thermal state...')
+            intersect = processing.run("native:multiintersection", {
+                'INPUT': od,
+                'OVERLAYS': [self.thermal_state],
+                'OVERLAY_FIELDS_PREFIX': 'ts_', 'OUTPUT': 'TEMPORARY_OUTPUT'})
+            intersected = intersect['OUTPUT']
+
+            intersected.dataProvider().addAttributes([QgsField("ts_extent", QVariant.Double, "double", 10, 3),
+                                                      QgsField("ts_percent", QVariant.Double, "double", 10, 3),
+                                                      QgsField("ts_subglacial_area", QVariant.Double, "double", 10, 3)])
+
+            expression_subglacial = QgsExpression('round(sum(area(@geometry) * 1E-6, group_by:="ID"), 3)')
+            expression_area = QgsExpression('round(area(@geometry)*1E-6,3)')
+            context_f = QgsExpressionContext()
+            context_f.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(intersected))
+            with edit(intersected):
+                area_idx = intersected.fields().indexOf('ts_extent')
+                subglacial_idx = intersected.fields().indexOf('ts_subglacial_area')
+                for f in intersected.getFeatures():
+                    context_f.setFeature(f)
+                    # planimetric area - suitable for small-scale features
+                    intersected.changeAttributeValue(f.id(), area_idx, expression_area.evaluate(context_f))
+                    intersected.changeAttributeValue(f.id(), subglacial_idx, expression_subglacial.evaluate(context_f))
+
+            with edit(intersected):
+                percent_idx = intersected.fields().indexOf('ts_percent')
+                expression_percent = QgsExpression('round(("ts_extent"/"ts_subglacial_area")*100,2)')
+                for f in intersected.getFeatures():
+                    context_f.setFeature(f)
+                    intersected.changeAttributeValue(f.id(), percent_idx, expression_percent.evaluate(context_f))
+
+            # create a dictionary of necessary fields
+            valuesx = []
+            features = intersected.getFeatures()
+            for feat in features:
+                valuesx.append({'id': feat['ID'], 'ts_thermal_state': feat['ts_thermal_state'],
+                                'ts_percent': feat['ts_percent'], 'ts_subglacial_area': feat['ts_subglacial_area']})
+
+            od.dataProvider().addAttributes([QgsField("subglacial_area", QVariant.Double, "double", 10, 3),
+                                             QgsField("ts_warm", QVariant.Double, "double", 10, 3),
+                                             QgsField("ts_cold", QVariant.Double, "double", 10,3),
+                                             QgsField("ts_uncertain", QVariant.Double, "double", 10, 3)])
+
+            context_f.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(od))
+
+            with edit(od):
+                fields = [od.fields().indexOf('ts_cold'), od.fields().indexOf('ts_uncertain'),
+                          od.fields().indexOf('ts_warm')]
+                for f in od.getFeatures():
+                    context_f.setFeature(f)
+                    od_id = f['ID']
+                    # iterate over thermal states for each feature
+                    for ts,field in zip(range(-1,2,1), fields):
+                        res = [sub for sub in valuesx if sub['id'] == od_id and sub['ts_thermal_state'] == ts]
+                        if len(res) > 0:
+                            od.changeAttributeValue(f.id(), field, res[0]['ts_percent'])
+                        else:
+                            od.changeAttributeValue(f.id(), field, 0)
+                        if feedback.isCanceled():
+                            return {}
+
+            with edit(od):
+                for f in od.getFeatures():
+                    context_f.setFeature(f)
+                    od_id = f['ID']
+                    subglacial_idx = od.fields().indexOf('subglacial_area')
+                    res = [sub for sub in valuesx if sub['id'] == od_id]
+                    if len(res) > 0:
+                        od.changeAttributeValue(f.id(), subglacial_idx, res[0]['ts_subglacial_area'])
+                    else:
+                        od.changeAttributeValue(f.id(), subglacial_idx, 0)
+
+            if feedback.isCanceled():
+                return {}
+
+        od.dataProvider().addAttributes([QgsField("Class_Nesting", QVariant.Int)])
+        od.updateFields()
+        if od.featureCount() > 0:
+            self.renesting(od)
+
+        params = {'INPUT': od,
+                  'LAYER_NAME': 'glacial_od_class',
+                  'OUTPUT': self.out_path}
+        processing.run("native:savefeatures", params, is_child_algorithm=True, context=self.context,
+                       feedback=self.feedback)
+        self.update_log('Exported ' + str(od) + ' layer to ' + self.out_path)
+
+        # glacial_od_class = QgsVectorLayer(self.out_path + '|layername=glacial_OD_class', 'Polygons', 'ogr')
+        #
+        # glacial_od_class.selectByExpression('"Valley type" = \'Fluvial\' or "Type" = \'circular\'')
+        #
+        # if glacial_od_class.selectedFeatureCount() > 0:
+        #     with edit(glacial_od_class):
+        #         glacial_od_class.deleteSelectedFeatures()
+        #
+
 
         self.update_log('Script finished at ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + '\n')
 
         return {self.OUTPUT: self.out_path}
 
     def postProcessAlgorithm(self, context, feedback):
-        layer = QgsProcessingUtils.mapLayerFromString(self.out_path, context)
-        # Use random colors to create categorized symbol for each group/category
-        categories = []
-        # get unique values
-        fni = layer.fields().indexFromName('Type')
-        unique_values = layer.uniqueValues(fni)
+        retval = super().postProcessAlgorithm(context, feedback)
+        style_file = 'od_type.qml'
+        style_path = os.path.join(os.path.dirname(__file__), 'styles', style_file)
 
-        for unique_value in unique_values:
-            symbol = QgsSymbol.defaultSymbol(layer.geometryType())
-            # create renderer object
-            category = QgsRendererCategory(unique_value, symbol, str(unique_value))
-            # entry for the list of category items
-            categories.append(category)
-
-        # create renderer object
-        renderer = QgsCategorizedSymbolRenderer('Type', categories)
-        renderer.setOrderBy(QgsFeatureRequest.OrderBy([QgsFeatureRequest.OrderByClause('Nesting', True)]))
-        renderer.setOrderByEnabled(True)
-        # assign the created renderer to the layer
-        if renderer is not None:
-            layer.setRenderer(renderer)
-
-        layer.triggerRepaint()
-        return {self.OUTPUT: self.out_path}
+        QgsProcessingUtils.mapLayerFromString(self.out_path, context).loadNamedStyle(style_path)
+        return retval
 
     def name(self):
         """
