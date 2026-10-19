@@ -3,9 +3,9 @@
 #
 # Automated mapping of closed depressions such as glacial overdeepenings
 #							 -------------------
-#		begin				: 2024-08-15
+#		begin				: 2026-10-19
 #		git sha				: $Format:%H$
-#		copyright			: (C) 2024 by Henry Patton
+#		copyright			: (C) 2026 by Henry Patton
 #		email				: henry.patton@uit.no
 # ***************************************************************************/
 #
@@ -65,7 +65,7 @@ PEP8EXCLUDE=pydev,resources.py,conf.py,third_party,ui
 #	* Windows:
 #	  AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins'
 
-QGISDIR=C:\Users\hpa017\AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins
+QGISDIR=AppData/Roaming/QGIS/QGIS3/profiles/default/python/plugins
 
 #################################################
 # Normally you would not need to edit below here

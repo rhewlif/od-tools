@@ -4,6 +4,9 @@
 <p><b>Unique ID field</b> Defaults to 'ID' from mapping algorithm.</p>
 <p><b>Elevation field</b> Lip elevation. Defaults to 'ELEV' from mapping algorithm.</p>
 <p><b>Nesting field</b> Basin nesting. Defaults to 'Nesting' from mapping algorithm.</p>
+<p><b>Elongation threshold</b> The elongation ratio is calculated as length / width. Default for elongated classification: >2.0</p>
+<p><b>Roundness threshold</b> Roundness is calculated as 4π × polygon area / perimeter². This forumula provides a value between 0 and 1, where 1 represents a perfect circle and 0 represents a completely flat polygon. Default for circular classification: >0.85</p>
 <p><b>Input DEM</b> The digital elevation model used to map the basins. Required to calculate basin volumes.</p>
 <p><b>Output GPKG</b> Destination for the output vector file.</p>
 <p><b>Write log file</b> Creates a detailed and timestamped log file in the same folder as the output GPKG, including how the basins were classified.</p>
+

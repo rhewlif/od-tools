@@ -1,9 +1,9 @@
 [general]
-name=OD mapper
+name=OD Tools
 qgisMinimumVersion=3.40
 qgisMaximumVersion=3.99
-description=Automated mapping of closed basins such as glacial overdeepenings.
-about=To identify closed depressions from a digital elevation model.
+description=Tools to map closed basins, such as glacial overdeepenings.
+about=OD Tools identifies and classifies closed depressions from a raster surface. The plugin has the following tools:<ul><li>1. Map closed basins. This tool uses a contour-tracking algorithm to identify depressions from a raster input. Parameters allow for tuning the sensitivity of the algorithm and for setting minimum/maximum properties.</li><li>2. Classify closed basins. This tool calculates depression metrics and classifies them as circular or elongate.
 category=Vector
 version=0.1
 author=Henry Patton
@@ -15,11 +15,11 @@ deprecated=False
 changelog=
     0.1 - Initial release
 
-tags=overdeepening, basin, closed, contour, mapping, topography, DEM
+tags=overdeepening, basin, closed, contour, depression, topography, DEM
 
-tracker=https://github.com/rhewlif/od-mapper/issues
-repository=https://github.com/rhewlif/od-mapper
-homepage=https://github.com/rhewlif/od-mapper
+tracker=https://github.com/rhewlif/od-tools/issues
+repository=https://github.com/rhewlif/od-tools
+homepage=https://github.com/rhewlif/od-tools
 icon=icons/icon.png
 
 # hasProcessingProvider=yes
