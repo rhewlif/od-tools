@@ -1,2 +1,7 @@
+0.2
+Fixed Qt6 compatibility issues
+Fixed styling of classify outputs
+Fixed feedback reporting of volume calculations
+
 0.1
 Initial release

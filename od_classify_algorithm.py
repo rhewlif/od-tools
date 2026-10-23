@@ -25,6 +25,9 @@
 __author__ = 'Henry Patton'
 __date__ = '2026-10-19'
 __copyright__ = '(C) 2026 by Henry Patton'
+
+# This will get replaced with a git SHA1 when you do a git archive
+
 __revision__ = '$Format:%H$'
 
 from collections import defaultdict
@@ -33,13 +36,14 @@ import logging
 from datetime import datetime
 
 from qgis.PyQt.QtCore import QCoreApplication, QMetaType
-from qgis.core import (QgsProcessing, QgsProcessingParameterField, QgsFeatureRequest, edit,
+from qgis.core import (QgsProcessingLayerPostProcessorInterface, QgsProcessingContext, QgsProcessing, QgsProcessingParameterField, QgsFeatureRequest, edit,
                        QgsField, QgsProcessingParameterNumber, QgsSpatialIndex,
                        QgsExpression, QgsExpressionContext, QgsAggregateCalculator, QgsVectorLayer, QgsProcessingException,
                        QgsExpressionContextUtils, QgsProcessingAlgorithm, QgsProcessingParameterRasterLayer,
                        QgsGeometry, QgsProcessingParameterVectorDestination, QgsProviderRegistry,
                        QgsProcessingUtils,QgsProcessingParameterVectorLayer, NULL)
 from qgis import processing
+
 
 class ClassifyAlgorithm(QgsProcessingAlgorithm):
     post_processors = {}
@@ -74,7 +78,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(
                 self.INPUT,
                 self.tr('Input polygons (e.g., "1. Map closed basins" tool output)'),
-                [QgsProcessing.TypeVectorPolygon],
+                [QgsProcessing.SourceType.TypeVectorPolygon],
                 optional=False,
             )
         )
@@ -113,7 +117,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.ELONGATION_THRESHOLD,
                 self.tr('Elongation ratio threshold'),
-                QgsProcessingParameterNumber.Double,
+                QgsProcessingParameterNumber.Type.Double,
                 defaultValue=2.0,
                 optional=False
             )
@@ -123,7 +127,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.ROUNDNESS_THRESHOLD,
                 self.tr('Roundness threshold'),
-                QgsProcessingParameterNumber.Double,
+                QgsProcessingParameterNumber.Type.Double,
                 defaultValue=0.85,
                 optional=False
             )
@@ -137,11 +141,11 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
-        self.addParameter(
+        """ self.addParameter(
             QgsProcessingParameterVectorLayer(
                 self.VALLEY_FILE,
                 self.tr('Valley classification point file'),
-                [QgsProcessing.TypeVectorPoint],
+                [QgsProcessing.SourceType.TypeVectorPoint],
                 optional=True,
             )
         )
@@ -149,7 +153,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(
                 self.ISOCHRONE_FILE,
                 self.tr('Isochrone polygon file'),
-                [QgsProcessing.TypeVectorPolygon],
+                [QgsProcessing.SourceType.TypeVectorPolygon],
                 optional=True,
             )
         )
@@ -157,23 +161,16 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(
                 self.THERMAL_FILE,
                 self.tr('Thermal state polygons'),
-                [QgsProcessing.TypeVectorPolygon],
+                [QgsProcessing.SourceType.TypeVectorPolygon],
                 optional=True,
             )
-        )
-
-        output_parameter = QgsProcessingParameterVectorDestination(
-            self.OUTPUT,
-            self.tr('Output GeoPackage layer'),
-            type=QgsProcessing.TypeVectorPolygon,
-            createByDefault=True,
-        )
+        ) """
 
         self.addParameter(
             QgsProcessingParameterVectorDestination(
                 self.OUTPUT,
                 self.tr('Output GeoPackage layer'),
-                type=QgsProcessing.TypeVectorPolygon,
+                type=QgsProcessing.SourceType.TypeVectorPolygon,
                 createByDefault=False,
             )
         )
@@ -379,8 +376,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                         "OUTPUT": "TEMPORARY_OUTPUT",
                     },
                     is_child_algorithm=True,
-                    context=context,
-                    feedback=feedback,
+                    context=context
                 )
 
                 basin_mask = self._as_vector_layer(basin_result["OUTPUT"], context)
@@ -407,8 +403,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                         "OUTPUT": "TEMPORARY_OUTPUT",
                     },
                     is_child_algorithm=True,
-                    context=context,
-                    feedback=feedback,
+                    context=context
                 )
 
                 volume_result = processing.run(
@@ -421,8 +416,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                         "OUTPUT_HTML_FILE": "TEMPORARY_OUTPUT",
                     },
                     is_child_algorithm=True,
-                    context=context,
-                    feedback=feedback,
+                    context=context
                 )
 
                 raw_volume = volume_result.get("VOLUME")
@@ -500,10 +494,10 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         expr_context = QgsExpressionContext()
         expr_context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(od))
 
-        if 'area_km2' not in [fld.name() for fld in od.fields()]:
-            od.dataProvider().addAttributes([QgsField("area_km2", QMetaType.Type.Double, "double", 10, 3)])
+        if 'Area_km2' not in [fld.name() for fld in od.fields()]:
+            od.dataProvider().addAttributes([QgsField("Area_km2", QMetaType.Type.Double, "double", 10, 3)])
             od.updateFields()
-            area_idx = od.fields().indexOf('area_km2')
+            area_idx = od.fields().indexOf('Area_km2')
             expression_area = QgsExpression('area(@geometry)*1E-6')
             expr_context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(od))
             with edit(od):
@@ -518,7 +512,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                     return {}
                 
                 expr_context.setFeature(f)
-                area_km2 = f['area_km2']
+                area_km2 = f['Area_km2']
 
                 circ = expression_circularity.evaluate(expr_context)
                 od.changeAttributeValue(f.id(), circularity_idx, circ)
@@ -546,11 +540,11 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         
 
         if self.dem_file:
-            if 'Volume' not in [fld.name() for fld in od.fields()]:
-                od.dataProvider().addAttributes([QgsField("Volume", QMetaType.Type.Double, "double", 10, 4)])
+            if 'Volume_km3' not in [fld.name() for fld in od.fields()]:
+                od.dataProvider().addAttributes([QgsField("Volume_km3", QMetaType.Type.Double, "double", 10, 4)])
                 od.updateFields()
 
-            vol_idx = od.fields().indexOf('Volume')
+            vol_idx = od.fields().indexOf('Volume_km3')
             with edit(od):
                 for feature in od.getFeatures():
                     basin_id = feature[self.id_field]
@@ -565,7 +559,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
 
             for n in range(1, max_nest + 1):
                 od.selectByExpression(self.nesting_field + ' = ' + str(n))
-                total_sum = od.aggregate(QgsAggregateCalculator.Sum, "Volume", fids=od.selectedFeatureIds())
+                total_sum = od.aggregate(QgsAggregateCalculator.Aggregate.Sum, "Volume_km3", fids=od.selectedFeatureIds())
                 self.update_log('Total OD volumes (nesting='+str(n)+'): ' + str(round(total_sum[0], 2)) + ' km^3')
 
 
@@ -671,7 +665,6 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                         valley_type = NULL
 
                     od.changeAttributeValue(feature.id(), valley_type_idx, valley_type)
-
 
         if self.isochrone_polys:
             self.update_log('Extracting last occupation age...')
@@ -810,7 +803,6 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                 if basin_count and (i % 10 == 0 or i == basin_count - 1):
                     feedback.setProgress(int(100.0 * (i + 1) / basin_count))
 
-
             # Write the aggregated value back to every basin.
             with edit(od):
                 for feature in od.getFeatures():
@@ -843,7 +835,6 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                 context=context,
                 feedback=feedback,)
             intersected = self._as_vector_layer(intersect_result['OUTPUT'], context)    
-
 
             # create a dictionary of necessary fields
             area_by_basin_state = defaultdict(float)
@@ -940,6 +931,11 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
                   'LAYER_NAME': 'glacial_od_class',
                   'OUTPUT': self.out_path}, is_child_algorithm=True, context=context, feedback=feedback)
         self.output_destination = save_result['OUTPUT']
+        # Rename the layer QGIS already queued (honours the "open output file" checkbox)
+        if context.willLoadLayerOnCompletion(self.out_path):
+            details = context.layerToLoadOnCompletionDetails(self.out_path)
+            details.name = 'Glacial OD class'
+            context.addLayerToLoadOnCompletion(self.out_path, details)
 
         self.update_log('Exported ' + str(od) + ' layer to ' + self.output_destination)
         self.update_log('Script finished at ' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + '\n')
@@ -947,33 +943,26 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         return {self.OUTPUT: self.output_destination}
 
     def postProcessAlgorithm(self, context, feedback):
-        retval = super().postProcessAlgorithm(context, feedback)
         style_path = os.path.join(os.path.dirname(__file__), 'styles', 'od_type.qml')
-        layer = QgsProcessingUtils.mapLayerFromString(self.output_destination, context)
+        # Style the exact layer QGIS will load: look it up using the queued key, not a rebuilt path
+        source = self.out_path if context.willLoadLayerOnCompletion(self.out_path) else self.output_destination
+        layer = QgsProcessingUtils.mapLayerFromString(source, context)
 
         if layer is None:
             feedback.reportError(
                 'Output layer was not available for styling. '
                 f'Destination: {self.output_destination}'
             )
-            return retval
-
-        if not os.path.exists(style_path):
-            feedback.reportError(
-                f'Output style file does not exist: {style_path}'
-            )
-            return retval
-
-        error_message, success = layer.loadNamedStyle(style_path)
-
-        if success:
-            layer.triggerRepaint()
+        elif not os.path.exists(style_path):
+            feedback.reportError(f'Output style file does not exist: {style_path}')
         else:
-            feedback.reportError(
-                f'Could not load output style: {error_message}'
-            )
+            error_message, success = layer.loadNamedStyle(style_path)
+            if success:
+                layer.triggerRepaint()
+            else:
+                feedback.reportError(f'Could not load output style: {error_message}')
 
-        return retval
+        return {self.OUTPUT: self.output_destination}
 
     def name(self):
         """
@@ -1008,7 +997,7 @@ class ClassifyAlgorithm(QgsProcessingAlgorithm):
         Algorithm manipulating project (toggle layer) or using external library are not thread safe
         See :https://api.qgis.org/api/classQgsProcessingAlgorithm.html#a6a8c21fab75e03f50f45e41a9d67dbc3a229dea6cedf8c59132196dee09d4f2f6
         """
-        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading
+        return super().flags() | QgsProcessingAlgorithm.Flag.FlagNoThreading
 
     def createInstance(self):
         return ClassifyAlgorithm()

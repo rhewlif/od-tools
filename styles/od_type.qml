@@ -148,7 +148,7 @@
     <categories>
       <category type="string" symbol="0" uuid="{73ab84b0-063a-4a18-956e-e9966e8b6dc1}" value="circular" render="true" label="circular"/>
       <category type="string" symbol="1" uuid="{50993de4-923d-4bce-8b1e-32b92a7d92ca}" value="elongated" render="true" label="elongated"/>
-      <category type="string" symbol="2" uuid="{643ed41b-1394-460a-821b-3fcf36f51c2f}" value="NULL" render="true" label="NULL"/>
+      <category type="NULL" symbol="2" uuid="{643ed41b-1394-460a-821b-3fcf36f51c2f}" value="" render="true" label=""/>
     </categories>
     <symbols>
       <symbol type="fill" alpha="1" clip_to_extent="1" name="0" force_rhr="0" is_animated="0" frame_rate="10">

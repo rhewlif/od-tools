@@ -27,7 +27,6 @@ __date__ = '2026-10-19'
 __copyright__ = '(C) 2026 by Henry Patton'
 __revision__ = '$Format:%H$'
 
-from multiprocessing import context
 import os, logging
 from datetime import datetime
 from qgis.PyQt.QtCore import QCoreApplication, QMetaType
@@ -83,7 +82,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.CONTOUR_INTERVAL,
                 self.tr('Contour interval (m)'),
-                QgsProcessingParameterNumber.Integer,
+                QgsProcessingParameterNumber.Type.Integer,
                 defaultValue=10,
                 optional=False
             )
@@ -93,7 +92,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.CONTOUR_THRESHOLD,
                 self.tr('% contour change threshold'),
-                QgsProcessingParameterNumber.Integer,
+                QgsProcessingParameterNumber.Type.Integer,
                 defaultValue=250,
                 optional=False
             )
@@ -103,7 +102,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.FLAT_BOTTOM,
                 self.tr('% contour change threshold from initial contour'),
-                QgsProcessingParameterNumber.Integer,
+                QgsProcessingParameterNumber.Type.Integer,
                 defaultValue=800,
                 optional=False
             )
@@ -113,7 +112,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.MIN_OD_DEPTH,
                 self.tr('Minimum depth for mapped basins (m)'),
-                QgsProcessingParameterNumber.Integer,
+                QgsProcessingParameterNumber.Type.Integer,
                 defaultValue=20,
                 optional=False
             )
@@ -123,7 +122,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.MIN_OD_AREA,
                 self.tr('Minimum area for mapped basins (km2)'),
-                QgsProcessingParameterNumber.Double,
+                QgsProcessingParameterNumber.Type.Double,
                 defaultValue=0.5,
                 optional=False
             )
@@ -133,7 +132,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterNumber(
                 self.MAX_OD_PERIM,
                 self.tr('Maximum basin perimeter (m)'),
-                QgsProcessingParameterNumber.Integer,
+                QgsProcessingParameterNumber.Type.Integer,
                 defaultValue=2500000,
                 optional=False
             )
@@ -152,7 +151,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(
                 self.MASK_FILE,
                 self.tr('Polygon boundary mask for mapping'),
-                [QgsProcessing.TypeVectorPolygon],
+                [QgsProcessing.SourceType.TypeVectorPolygon],
                 optional=True,
                 defaultValue=None
             )
@@ -162,7 +161,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(
                 self.CONTOURS_FILE,
                 self.tr('Pre-made contour file'),
-                [QgsProcessing.TypeVectorLine],
+                [QgsProcessing.SourceType.TypeVectorLine],
                 optional=True,
                 defaultValue=None
             )
@@ -274,7 +273,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                 QgsFeatureRequest.OrderByClause('Depth', ascending=True)
             ])
         )
-        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setFlags(QgsFeatureRequest.Flag.NoGeometry)
         request.setSubsetOfAttributes(
             list(required_fields),
             intersected_layer.fields(),
@@ -479,7 +478,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                 f'{crs.authid()} uses geographic coordinates (degrees).'
             )
 
-        if crs.mapUnits() != QgsUnitTypes.DistanceMeters:
+        if crs.mapUnits() != QgsUnitTypes.DistanceUnit.DistanceMeters:
             raise QgsProcessingException(
                 'The input DEM must use metre-based map units. '
                 f'CRS {crs.authid()} uses '
@@ -574,6 +573,13 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                                         is_child_algorithm=True, context=context)
             contour_layer = self._as_vector_layer(contouring['OUTPUT'])
             #self.create_od_gpkg(orig_contour_layer, 'contours_original')
+
+        #all_contours_layer = QgsVectorLayer(f'{self.ODfilename}|layername=contours_original', 'Lines', 'ogr')
+        #all_contours_layer.selectAll()
+        #contour_layer = processing.run("native:saveselectedfeatures", 
+        #                               {'INPUT': all_contours_layer, 'OUTPUT': 'memory:'},
+        #                               context=context)['OUTPUT']
+        #all_contours_layer.removeSelection()
 
         self.update_log(f'Found contours. n = {contour_layer.featureCount()}')
 
@@ -689,7 +695,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         depth_idx = allcontour_polygons_layer.fields().indexOf('Depth')
 
         request = QgsFeatureRequest()
-        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setFlags(QgsFeatureRequest.Flag.NoGeometry)
         request.setSubsetOfAttributes(
             ['_z_min', '_z_max', 'ELEV'],
             allcontour_polygons_layer.fields(),
@@ -760,7 +766,6 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             with edit(allcontour_polygons_layer):
                 allcontour_polygons_layer.deleteSelectedFeatures()
 
-
         # delete lone polygons with a max elevation greater than the lip. The rest are dealt with in the tracker as some 'peaks' might be contained by higher lips.
         if not self.allow_peaks:
             allcontour_polygons_layer.selectByExpression(
@@ -820,7 +825,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         clause1 = QgsFeatureRequest.OrderByClause('poly_id', ascending=True)
         clause2 = QgsFeatureRequest.OrderByClause('elevation', ascending=True)
         orderby = QgsFeatureRequest.OrderBy([clause1, clause2])
-        request.setOrderBy(orderby).setFlags(QgsFeatureRequest.NoGeometry)
+        request.setOrderBy(orderby).setFlags(QgsFeatureRequest.Flag.NoGeometry)
 
         if minima_points_layer.featureCount() > 0:
             delete_ids = []
@@ -962,7 +967,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         minima_by_poly_id = {}
 
         request = QgsFeatureRequest()
-        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setFlags(QgsFeatureRequest.Flag.NoGeometry)
         request.setSubsetOfAttributes(
             ['poly_id', 'elevation'],
             minima_points_layer.fields(),
@@ -1002,7 +1007,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
                                                        'INTERSECT': QgsProcessingFeatureSourceDefinition(
                                                            minima_points_layer.id(), selectedFeaturesOnly=True,
                                                            featureLimit=-1,
-                                                           geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
+                                                           geometryCheck=QgsFeatureRequest.InvalidGeometryCheck.GeometryAbortOnInvalid),
                                                         'OUTPUT': 'TEMPORARY_OUTPUT'},
                                                         is_child_algorithm=True, context=context)
             intersected_layer = self._as_vector_layer(intersect['OUTPUT'])
@@ -1062,7 +1067,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         polygonise = processing.run("qgis:linestopolygons", {
             'INPUT': QgsProcessingFeatureSourceDefinition(contour_layer.id(), selectedFeaturesOnly=True,
                                                           featureLimit=-1,
-                                                          geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
+                                                          geometryCheck=QgsFeatureRequest.InvalidGeometryCheck.GeometryAbortOnInvalid),
             'OUTPUT': 'TEMPORARY_OUTPUT'}, context=context)
         od_polygons_layer = polygonise['OUTPUT']
 
@@ -1088,7 +1093,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         clause1 = QgsFeatureRequest.OrderByClause('ID_2', ascending=True)
         clause2 = QgsFeatureRequest.OrderByClause('elevation', ascending=True)
         orderby = QgsFeatureRequest.OrderBy([clause1, clause2])
-        request.setOrderBy(orderby).setFlags(QgsFeatureRequest.NoGeometry)
+        request.setOrderBy(orderby).setFlags(QgsFeatureRequest.Flag.NoGeometry)
         request.setSubsetOfAttributes(['ID_2', 'elevation'], join_min_layer.fields())
 
         dfeats = []
@@ -1133,8 +1138,8 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
             od_polygons_layer.selectByExpression(f'"Nesting" = {n - 1}')
             count = processing.run("native:countpointsinpolygon", {'POLYGONS': QgsProcessingFeatureSourceDefinition(
                 od_polygons_layer.id(), selectedFeaturesOnly=True, featureLimit=-1,
-                geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid), 'POINTS': QgsProcessingFeatureSourceDefinition(
-                nested_points.id(), selectedFeaturesOnly=True, featureLimit=-1, geometryCheck=QgsFeatureRequest.GeometryAbortOnInvalid),
+                geometryCheck=QgsFeatureRequest.InvalidGeometryCheck.GeometryAbortOnInvalid), 'POINTS': QgsProcessingFeatureSourceDefinition(
+                nested_points.id(), selectedFeaturesOnly=True, featureLimit=-1, geometryCheck=QgsFeatureRequest.InvalidGeometryCheck.GeometryAbortOnInvalid),
                                                            'WEIGHT': '', 'CLASSFIELD': '', 'FIELD': 'NUMPOINTS',
                                                            'OUTPUT': 'TEMPORARY_OUTPUT'},
                                    context=context)
@@ -1254,7 +1259,7 @@ class ODmapperAlgorithm(QgsProcessingAlgorithm):
         Algorithm manipulating project (toggle layer) or using external library are not thread safe
         See :https://api.qgis.org/api/classQgsProcessingAlgorithm.html#a6a8c21fab75e03f50f45e41a9d67dbc3a229dea6cedf8c59132196dee09d4f2f6
         """
-        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading
+        return super().flags() | QgsProcessingAlgorithm.Flag.FlagNoThreading
 
     def createInstance(self):
         return ODmapperAlgorithm()
